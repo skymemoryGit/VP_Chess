@@ -3,7 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-<title>Scacchi Online - Partite rapide senza account</title>
+<title>VP Chess — Scacchi Online, partite rapide senza account</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233c5f39'/%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='64' fill='%23fbf7ec'%3E%E2%99%9A%3C/text%3E%3C/svg%3E" />
+<script>
+  // Applica subito il tema salvato (o quello di sistema) prima del primo
+  // paint, per evitare un lampo del tema chiaro seguito dal cambio scuro.
+  (function(){
+    try{
+      var saved = localStorage.getItem('vp_chess_theme');
+      var theme = saved || ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    }catch(e){}
+  })();
+</script>
 <style>
   :root{
     --bg-top: #f6f1e4;
@@ -43,6 +55,42 @@
     --shadow-lg: 0 12px 34px rgba(30, 24, 8, 0.16);
   }
 
+  :root[data-theme="dark"]{
+    --bg-top: #20241f;
+    --bg-bottom: #14160f;
+    --panel: #262a24;
+    --panel-border: #3a3f36;
+    --text: #ece7d9;
+    --text-muted: #a6a191;
+    --accent: #6fae67;
+    --accent-dark: #4f7a4a;
+    --accent-light: rgba(111, 174, 103, 0.16);
+    --accent-contrast: #10190f;
+    --danger: #e2685d;
+    --danger-dark: #b5473f;
+    --warn-bg: #3a331b;
+    --warn-border: #6b5a24;
+
+    --square-light: #b7ab8a;
+    --square-dark: #587042;
+    --square-selected: rgba(255, 199, 44, 0.5);
+    --square-lastmove: rgba(247, 214, 87, 0.4);
+    --square-check: rgba(224, 92, 82, 0.65);
+    --square-legal-dot: rgba(20, 20, 15, 0.4);
+
+    --wood-1: #6c4b28;
+    --wood-2: #3f2a15;
+    --wood-3: #8c6339;
+
+    --piece-white-fill: #fbf7ec;
+    --piece-white-stroke: #1c1a16;
+    --piece-black-fill: #14130f;
+    --piece-black-stroke: #f6f1e2;
+
+    --shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 34px rgba(0, 0, 0, 0.55);
+  }
+
   *{ box-sizing: border-box; }
   html,body{ height:100%; }
   body{
@@ -51,6 +99,7 @@
     background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom) 340px);
     color: var(--text);
     min-height: 100vh;
+    transition: background .2s ease, color .2s ease;
   }
   button{ font-family: inherit; }
   .hidden{ display:none !important; }
@@ -62,6 +111,65 @@
     align-items:center;
     padding: 16px;
   }
+
+  /* ---------- Brand bar (logo VP Chess) ---------- */
+  .brand-bar{
+    width:100%;
+    max-width: 980px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom: 14px;
+    user-select:none;
+  }
+  .brand-left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .theme-toggle{
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1.5px solid var(--panel-border);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 17px;
+    cursor:pointer;
+    transition: transform .1s ease, background .15s ease, border-color .15s ease;
+    flex-shrink:0;
+  }
+  .theme-toggle:hover{ transform: translateY(-1px); border-color: var(--accent); }
+  .theme-toggle:active{ transform: translateY(0) scale(.94); }
+  .brand-crest{
+    width:36px;
+    height:36px;
+    flex-shrink:0;
+    border-radius: 10px;
+    background: linear-gradient(160deg, var(--accent), var(--accent-dark));
+    box-shadow: var(--shadow);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color: var(--piece-white-fill);
+    font-size: 21px;
+    line-height:1;
+  }
+  .brand-wordmark{
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -.3px;
+    color: var(--text);
+    display:flex;
+    align-items:baseline;
+    gap: 3px;
+  }
+  .brand-wordmark .brand-vp{ color: var(--accent-dark); }
+  .brand-wordmark .brand-chess{ color: var(--text-muted); font-weight: 700; }
 
   .top-notice{
     width:100%;
@@ -376,6 +484,33 @@
   .clock.active-clock{ background: linear-gradient(180deg, var(--accent), var(--accent-dark)); color:#fff; }
   @keyframes lowTimePulse{ 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
 
+  .captured-strip{
+    width:100%;
+    max-width: 640px;
+    min-height: 18px;
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap: 0 1px;
+    padding: 0 4px;
+    margin-top: -4px;
+  }
+  .captured-strip .cap-piece{
+    display:inline-flex;
+    width: 15px;
+    height: 15px;
+    margin-right: -4px;
+  }
+  .captured-strip .cap-piece svg{ width:100%; height:100%; display:block; }
+  .captured-strip .cap-piece.white-piece .piece-glyph{ fill: var(--piece-white-fill); stroke: var(--piece-white-stroke); stroke-width: 3.4px; }
+  .captured-strip .cap-piece.black-piece .piece-glyph{ fill: var(--piece-black-fill); stroke: var(--piece-black-stroke); stroke-width: 2.2px; stroke-opacity: .8; }
+  .captured-strip .cap-advantage{
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--accent-dark);
+  }
+
   .board-frame{
     width:100%;
     max-width: 640px;
@@ -440,6 +575,21 @@
     40%{ box-shadow: inset 0 0 0 6px rgba(255,255,255,.35); }
     100%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
   }
+
+  .square-coord{
+    position:absolute;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height:1;
+    opacity: .8;
+    pointer-events:none;
+    z-index: 1;
+    user-select:none;
+  }
+  .square-coord.coord-rank{ top: 3px; left: 4px; }
+  .square-coord.coord-file{ bottom: 2px; right: 4px; }
+  .square.light .square-coord{ color: var(--square-dark); }
+  .square.dark .square-coord{ color: var(--square-light); }
 
   .square .legal-dot{
     position:absolute;
@@ -667,6 +817,13 @@
 <body>
 
 <div class="app-shell">
+  <div class="brand-bar">
+    <div class="brand-left">
+      <span class="brand-crest" aria-hidden="true">&#9819;</span>
+      <span class="brand-wordmark"><span class="brand-vp">VP</span><span class="brand-chess">Chess</span></span>
+    </div>
+    <button type="button" id="btn-theme-toggle" class="theme-toggle" aria-label="Cambia tema chiaro/scuro" title="Cambia tema"></button>
+  </div>
   <div class="top-notice">
     Versione senza account: nessuna registrazione, nessuna password. Nickname e tavoli sono temporanei e vengono eliminati automaticamente.
   </div>
@@ -728,6 +885,7 @@
         </div>
         <div class="clock" id="clock-black">--:--</div>
       </div>
+      <div class="captured-strip" id="captured-black" aria-hidden="true"></div>
 
       <div class="status-banner" id="status-banner">Caricamento partita...</div>
 
@@ -744,6 +902,7 @@
         </div>
         <div class="clock" id="clock-white">--:--</div>
       </div>
+      <div class="captured-strip" id="captured-white" aria-hidden="true"></div>
 
       <div class="game-actions">
         <button id="btn-rotate" class="btn btn-secondary">&#8635; Ruota scacchiera</button>
@@ -900,6 +1059,88 @@
   }
 
   // ============================================================
+  // Suoni di gioco: sintetizzati con Web Audio API (nessun file
+  // audio esterno). Due suoni distinti come su chess.com: un
+  // "tocco" sordo e breve per la mossa normale, e uno schiocco piu'
+  // acuto e piu' brillante per la cattura.
+  // ============================================================
+  var audioCtx = null;
+  function getAudioCtx(){
+    if (audioCtx) return audioCtx;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try{ audioCtx = new AC(); }catch(e){ audioCtx = null; }
+    return audioCtx;
+  }
+  // Sblocca l'AudioContext al primo gesto dell'utente (necessario su
+  // molti browser, soprattutto mobile, prima che l'audio possa partire).
+  function unlockAudioOnce(){
+    var ctx = getAudioCtx();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    document.removeEventListener('pointerdown', unlockAudioOnce);
+    document.removeEventListener('keydown', unlockAudioOnce);
+  }
+  document.addEventListener('pointerdown', unlockAudioOnce);
+  document.addEventListener('keydown', unlockAudioOnce);
+
+  function playTone(ctx, freq, duration, type, peakGain, delay){
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    var t0 = ctx.currentTime + (delay || 0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peakGain, t0 + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+
+  function playClickNoise(ctx, duration, filterFreq, peakGain, delay){
+    var bufferSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++){
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = filterFreq;
+    var gain = ctx.createGain();
+    var t0 = ctx.currentTime + (delay || 0);
+    gain.gain.setValueAtTime(peakGain, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(t0);
+  }
+
+  // Suono di mossa: tocco legnoso, grave e breve.
+  function playMoveSound(){
+    var ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    playClickNoise(ctx, 0.045, 700, 0.22, 0);
+    playTone(ctx, 190, 0.10, 'sine', 0.22, 0);
+    playTone(ctx, 130, 0.08, 'sine', 0.12, 0.004);
+  }
+
+  // Suono di cattura: schiocco piu' acuto e brillante, doppio impatto.
+  function playCaptureSound(){
+    var ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    playClickNoise(ctx, 0.04, 1600, 0.28, 0);
+    playTone(ctx, 560, 0.09, 'triangle', 0.24, 0);
+    playTone(ctx, 900, 0.07, 'sine', 0.14, 0.012);
+  }
+
+  // ============================================================
   // Stato client
   // ============================================================
   var state = {
@@ -979,6 +1220,29 @@
   var btnGameoverLobby = $('btn-gameover-lobby');
 
   var toastContainer = $('toast-container');
+  var btnThemeToggle = $('btn-theme-toggle');
+
+  // ============================================================
+  // Tema chiaro/scuro
+  // ============================================================
+  var THEME_STORAGE_KEY = 'vp_chess_theme';
+
+  function applyThemeIcon(theme){
+    if (!btnThemeToggle) return;
+    btnThemeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+
+  applyThemeIcon(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+
+  if (btnThemeToggle){
+    btnThemeToggle.addEventListener('click', function(){
+      var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      applyThemeIcon(next);
+      try{ localStorage.setItem(THEME_STORAGE_KEY, next); }catch(e){}
+    });
+  }
 
   // ============================================================
   // Utility UI
@@ -1376,7 +1640,7 @@
     boardFrame.innerHTML = '';
     squareElements = {};
     var order = buildSquareOrder(state.orientation);
-    order.forEach(function(pos){
+    order.forEach(function(pos, idx){
       var sq = document.createElement('div');
       var isLight = (pos.file + pos.rank) % 2 === 1;
       sq.className = 'square ' + (isLight ? 'light' : 'dark');
@@ -1391,6 +1655,27 @@
           onSquareActivate({ currentTarget: ev.currentTarget });
         }
       });
+
+      // Coordinate a-h / 1-8: il numero di rank va nella colonna piu'
+      // a sinistra, la lettera di file nella riga piu' in basso (in
+      // base all'orientamento corrente della scacchiera).
+      var isLeftCol = (idx % 8 === 0);
+      var isBottomRow = (idx >= 56);
+      if (isLeftCol){
+        var rankLabel = document.createElement('span');
+        rankLabel.className = 'square-coord coord-rank';
+        rankLabel.textContent = String(pos.rank);
+        rankLabel.setAttribute('aria-hidden', 'true');
+        sq.appendChild(rankLabel);
+      }
+      if (isBottomRow){
+        var fileLabel = document.createElement('span');
+        fileLabel.className = 'square-coord coord-file';
+        fileLabel.textContent = 'abcdefgh'[pos.file];
+        fileLabel.setAttribute('aria-hidden', 'true');
+        sq.appendChild(fileLabel);
+      }
+
       boardFrame.appendChild(sq);
       squareElements[squareName(pos.file, pos.rank)] = sq;
     });
@@ -1401,6 +1686,54 @@
 
   function pieceColor(ch){
     return ch === ch.toUpperCase() ? 'white' : 'black';
+  }
+
+  // ============================================================
+  // Materiale catturato: confronta i pezzi presenti sulla scacchiera
+  // con la dotazione iniziale per dedurre chi ha mangiato cosa.
+  // ============================================================
+  var START_COUNTS = { P:8, N:2, B:2, R:2, Q:1, p:8, n:2, b:2, r:2, q:1 };
+  var PIECE_VALUE = { P:1, N:3, B:3, R:5, Q:9, p:1, n:3, b:3, r:5, q:9 };
+  var CAPTURE_ORDER = ['P', 'N', 'B', 'R', 'Q']; // dal meno al piu' prezioso
+
+  function capturedIconSpan(ch, color){
+    var cls = color === 'white' ? 'white-piece' : 'black-piece';
+    return '<span class="cap-piece ' + cls + '">' + pieceSVG(ch, color) + '</span>';
+  }
+
+  function renderCapturedMaterial(gs){
+    var whiteEl = $('captured-white');
+    var blackEl = $('captured-black');
+    if (!whiteEl || !blackEl) return;
+    if (!gs){ whiteEl.innerHTML = ''; blackEl.innerHTML = ''; return; }
+
+    var board = parseFEN(gs.fen);
+    var counts = {};
+    board.forEach(function(row){
+      row.forEach(function(ch){ if (ch) counts[ch] = (counts[ch] || 0) + 1; });
+    });
+
+    var whiteCapturedIcons = ''; // pezzi neri mangiati dal Bianco -> mostrati sulla riga del Bianco
+    var blackCapturedIcons = ''; // pezzi bianchi mangiati dal Nero -> mostrati sulla riga del Nero
+    var whiteValue = 0, blackValue = 0;
+
+    CAPTURE_ORDER.forEach(function(upper){
+      var lower = upper.toLowerCase();
+      var missingBlack = START_COUNTS[lower] - (counts[lower] || 0);
+      for (var i = 0; i < missingBlack; i++){
+        whiteCapturedIcons += capturedIconSpan(lower, 'black');
+        whiteValue += PIECE_VALUE[lower];
+      }
+      var missingWhite = START_COUNTS[upper] - (counts[upper] || 0);
+      for (var j = 0; j < missingWhite; j++){
+        blackCapturedIcons += capturedIconSpan(upper, 'white');
+        blackValue += PIECE_VALUE[upper];
+      }
+    });
+
+    var netForWhite = whiteValue - blackValue;
+    whiteEl.innerHTML = whiteCapturedIcons + (netForWhite > 0 ? '<span class="cap-advantage">+' + netForWhite + '</span>' : '');
+    blackEl.innerHTML = blackCapturedIcons + (netForWhite < 0 ? '<span class="cap-advantage">+' + (-netForWhite) + '</span>' : '');
   }
 
   function renderBoard(){
@@ -1458,12 +1791,24 @@
 
       var moveKey = gs.last_move[0] + gs.last_move[1] + gs.move_history.length;
       if (moveKey !== state.lastMoveKey){
+        var isFirstBoardForTable = state.lastMoveKey === null;
         state.lastMoveKey = moveKey;
         animateSlide(fromEl, toEl);
         if (toEl){
           toEl.classList.remove('square-impact');
           void toEl.offsetWidth;
           toEl.classList.add('square-impact');
+        }
+        // Niente suono quando si carica per la prima volta una partita gia'
+        // iniziata (join/riconnessione): la mossa non e' appena avvenuta
+        // "davanti" al giocatore. Per tutte le mosse successive suoniamo.
+        if (!isFirstBoardForTable){
+          var lastSan = gs.move_history[gs.move_history.length - 1] || '';
+          if (lastSan.indexOf('x') !== -1){
+            playCaptureSound();
+          } else {
+            playMoveSound();
+          }
         }
       }
     }
@@ -1601,7 +1946,15 @@
   }
 
   // ---- Drag & drop (pointer events, funziona anche su touch) ----
-  var dragData = null; // { square, ghostEl }
+  // Il click "secco" (clic sulla cella di partenza, poi clic sulla cella di
+  // arrivo) resta gestito da onSquareActivate/handleSquareChoice tramite
+  // l'evento nativo 'click'. Qui intercettiamo solo i trascinamenti veri:
+  // se il puntatore si sposta oltre una soglia minima dopo il pointerdown
+  // su un pezzo trascinabile, si attiva la modalita' drag; altrimenti non
+  // viene alterato nulla e il successivo evento 'click' gestisce la
+  // selezione/mossa a click. Questo permette di usare entrambe le
+  // modalita' senza che si disturbino a vicenda.
+  var DRAG_THRESHOLD_PX = 6;
 
   function attachDragHandlers(){
     Object.keys(squareElements).forEach(function(name){
@@ -1614,47 +1967,65 @@
     var el = ev.currentTarget;
     var square = el.getAttribute('data-square');
     var pieceEl = el.querySelector('.piece');
-    if (!pieceEl) return;
+    if (!pieceEl) return; // niente da trascinare: eventuale clic gestito da onSquareActivate
     var pColor = pieceEl.getAttribute('data-piece-color');
     if (!isMyTurn() || pColor !== state.color) return;
 
-    ev.preventDefault();
-    state.selected = square;
-    renderBoard();
+    var startX = ev.clientX;
+    var startY = ev.clientY;
+    var dragging = false;
+    var ghost = null;
 
-    var ghost = document.createElement('div');
-    ghost.className = 'drag-ghost';
-    ghost.innerHTML = pieceEl.innerHTML;
-    document.body.appendChild(ghost);
-    ghost.style.left = ev.clientX + 'px';
-    ghost.style.top = ev.clientY + 'px';
-    pieceEl.classList.add('dragging');
-
-    dragData = { fromSquare: square, ghost: ghost, sourcePiece: pieceEl };
+    function beginDrag(){
+      dragging = true;
+      state.selected = square;
+      renderBoard();
+      var livePieceEl = squareElements[square] && squareElements[square].querySelector('.piece');
+      ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      ghost.innerHTML = livePieceEl ? livePieceEl.innerHTML : pieceEl.innerHTML;
+      document.body.appendChild(ghost);
+      ghost.style.left = startX + 'px';
+      ghost.style.top = startY + 'px';
+      if (livePieceEl) livePieceEl.classList.add('dragging');
+    }
 
     function onMove(mev){
+      if (!dragging){
+        var dx = mev.clientX - startX;
+        var dy = mev.clientY - startY;
+        if ((dx * dx + dy * dy) < (DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX)) return;
+        beginDrag();
+      }
       ghost.style.left = mev.clientX + 'px';
       ghost.style.top = mev.clientY + 'px';
     }
+
     function onUp(uev){
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      ghost.remove();
-      if (dragData && dragData.sourcePiece) dragData.sourcePiece.classList.remove('dragging');
+      if (!dragging) return; // era un semplice clic: lo gestisce l'evento 'click'
+
+      if (ghost) ghost.remove();
+      var livePieceEl = squareElements[square] && squareElements[square].querySelector('.piece');
+      if (livePieceEl) livePieceEl.classList.remove('dragging');
+
       var targetEl = document.elementFromPoint(uev.clientX, uev.clientY);
       var targetSquareEl = targetEl ? targetEl.closest('.square') : null;
-      dragData = null;
       if (targetSquareEl){
         var destSquare = targetSquareEl.getAttribute('data-square');
         if (destSquare === square){
+          state.selected = null;
           renderBoard();
           return;
         }
         attemptMoveTo(square, destSquare);
       } else {
+        state.selected = null;
         renderBoard();
       }
     }
+
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
   }
@@ -1718,6 +2089,7 @@
     if (!gs) return;
     renderPlayerRows();
     renderMoves();
+    renderCapturedMaterial(gs);
 
     statusBanner.classList.remove('warn', 'danger');
     var text = '';
@@ -1810,6 +2182,7 @@
     state.role = null;
     state.color = null;
     state.lastGameState = null;
+    renderCapturedMaterial(null);
     closeOverlay(modalGameOver);
     showScreen('lobby');
   }
