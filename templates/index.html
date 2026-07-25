@@ -465,6 +465,35 @@
 
   .board-column{ display:flex; flex-direction:column; align-items:center; gap:10px; }
 
+  /* I due "slot" giocatore e lo slot scacchiera sono riordinabili via
+     flex "order": di default il Nero sta sopra e il Bianco sotto (vista
+     standard), ma quando la scacchiera viene ruotata (.flipped) i posti
+     si scambiano, cosi' il riquadro/nome/fumetto di ogni giocatore resta
+     sempre dalla stessa parte in cui si trovano visivamente i suoi pezzi.
+  */
+  .player-slot{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    width:100%;
+  }
+  .board-slot{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    width:100%;
+  }
+  .board-column > .player-slot[data-color="black"]{ order: 1; }
+  .board-column > .board-slot{ order: 2; }
+  .board-column > .player-slot[data-color="white"]{ order: 3; }
+  .board-column > .game-actions{ order: 4; }
+  .board-column > .reaction-bar{ order: 5; }
+  .board-column > .chat-bar{ order: 6; }
+  .board-column.flipped > .player-slot[data-color="black"]{ order: 3; }
+  .board-column.flipped > .player-slot[data-color="white"]{ order: 1; }
+
   .top-controls, .bottom-controls{
     width:100%;
     max-width: 640px;
@@ -881,6 +910,16 @@
     pointer-events:none;
   }
   .speech-bubble .b-emoji{ font-size: 15px; margin-right: 4px; }
+  /* Quando la riga del giocatore e' quella visivamente in alto (dipende
+     dall'orientamento della scacchiera), il fumetto si apre verso il
+     basso invece che verso l'alto, per non finire tagliato fuori dal
+     bordo superiore della pagina. */
+  .speech-bubble.below{
+    bottom: auto;
+    top: 100%;
+    margin-bottom: 0;
+    margin-top: 8px;
+  }
   @keyframes bubbleInOut{
     0%{ opacity:0; transform: translateY(6px) scale(.95); }
     8%{ opacity:1; transform: translateY(0) scale(1); }
@@ -943,37 +982,42 @@
 
   <!-- ============== PARTITA ============== -->
   <section id="screen-game" class="game-wrap hidden">
-    <div class="board-column">
+    <div class="board-column" id="board-column">
 
-      <div class="top-controls">
-        <div class="player-row" id="row-black">
-          <span class="dot" id="dot-black"></span>
-          <span class="player-avatar" id="avatar-black"></span>
-          <div>
-            <div class="player-name" id="name-black">In attesa...</div>
-            <div class="player-status" id="status-black"></div>
+      <div class="player-slot" data-color="black">
+        <div class="top-controls">
+          <div class="player-row" id="row-black">
+            <span class="dot" id="dot-black"></span>
+            <span class="player-avatar" id="avatar-black"></span>
+            <div>
+              <div class="player-name" id="name-black">In attesa...</div>
+              <div class="player-status" id="status-black"></div>
+            </div>
           </div>
+          <div class="clock" id="clock-black">--:--</div>
         </div>
-        <div class="clock" id="clock-black">--:--</div>
+        <div class="captured-strip" id="captured-black" aria-hidden="true"></div>
       </div>
-      <div class="captured-strip" id="captured-black" aria-hidden="true"></div>
 
-      <div class="status-banner" id="status-banner">Caricamento partita...</div>
+      <div class="board-slot">
+        <div class="status-banner" id="status-banner">Caricamento partita...</div>
+        <div class="board-frame" id="board-frame" role="grid" aria-label="Scacchiera"></div>
+      </div>
 
-      <div class="board-frame" id="board-frame" role="grid" aria-label="Scacchiera"></div>
-
-      <div class="top-controls">
-        <div class="player-row" id="row-white">
-          <span class="dot" id="dot-white"></span>
-          <span class="player-avatar" id="avatar-white"></span>
-          <div>
-            <div class="player-name" id="name-white">In attesa...</div>
-            <div class="player-status" id="status-white"></div>
+      <div class="player-slot" data-color="white">
+        <div class="top-controls">
+          <div class="player-row" id="row-white">
+            <span class="dot" id="dot-white"></span>
+            <span class="player-avatar" id="avatar-white"></span>
+            <div>
+              <div class="player-name" id="name-white">In attesa...</div>
+              <div class="player-status" id="status-white"></div>
+            </div>
           </div>
+          <div class="clock" id="clock-white">--:--</div>
         </div>
-        <div class="clock" id="clock-white">--:--</div>
+        <div class="captured-strip" id="captured-white" aria-hidden="true"></div>
       </div>
-      <div class="captured-strip" id="captured-white" aria-hidden="true"></div>
 
       <div class="game-actions">
         <button id="btn-rotate" class="btn btn-secondary">&#8635; Ruota scacchiera</button>
@@ -1267,6 +1311,7 @@
   var createError = $('create-error');
   var btnCancelCreate = $('btn-cancel-create');
 
+  var boardColumn = $('board-column');
   var boardFrame = $('board-frame');
   var statusBanner = $('status-banner');
   var movesList = $('moves-list');
@@ -1728,6 +1773,10 @@
   var squareElements = {}; // squareName -> element
 
   function renderBoardSkeleton(){
+    // Le righe giocatore (nero/bianco) si scambiano di posto insieme
+    // alla scacchiera, cosi' il riquadro/fumetto di ciascuno resta
+    // sempre dalla parte in cui si vedono visivamente i suoi pezzi.
+    if (boardColumn) boardColumn.classList.toggle('flipped', state.orientation === 'black');
     boardFrame.innerHTML = '';
     squareElements = {};
     var order = buildSquareOrder(state.orientation);
@@ -2332,13 +2381,22 @@
     }
   }
 
+  // Con l'orientamento standard (bianco in basso) il Nero e' la riga in
+  // alto; ruotando la scacchiera si scambiano (vedi .flipped in CSS).
+  // Il fumetto deve aprirsi verso il basso quando la sua riga e' quella
+  // in cima, altrimenti finirebbe tagliato fuori dal bordo della pagina.
+  function isRowOnTop(color){
+    var blackOnTop = state.orientation !== 'black';
+    return blackOnTop ? (color === 'black') : (color === 'white');
+  }
+
   function showSpeechBubble(color, data){
     var row = color === 'white' ? $('row-white') : $('row-black');
     if (!row) return;
     var existing = row.querySelector('.speech-bubble');
     if (existing) existing.remove();
     var bubble = document.createElement('div');
-    bubble.className = 'speech-bubble';
+    bubble.className = 'speech-bubble' + (isRowOnTop(color) ? ' below' : '');
     var emojiSpan = document.createElement('span');
     emojiSpan.className = 'b-emoji';
     emojiSpan.textContent = data.emoji;
