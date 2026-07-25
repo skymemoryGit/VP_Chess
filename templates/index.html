@@ -696,6 +696,12 @@
     color: var(--text-muted);
     font-size: 12px;
     margin-top: 26px;
+    line-height: 1.7;
+  }
+  footer.hint .hint-credit{
+    font-size: 11px;
+    opacity: .7;
+    margin-top: 2px;
   }
 
   .visually-hidden{
@@ -824,10 +830,6 @@
     </div>
     <button type="button" id="btn-theme-toggle" class="theme-toggle" aria-label="Cambia tema chiaro/scuro" title="Cambia tema"></button>
   </div>
-  <div class="top-notice">
-    Versione senza account: nessuna registrazione, nessuna password. Nickname e tavoli sono temporanei e vengono eliminati automaticamente.
-  </div>
-
   <div id="toast-container" aria-live="polite"></div>
 
   <!-- ============== SCHERMATA INGRESSO ============== -->
@@ -939,7 +941,10 @@
     </aside>
   </section>
 
-  <footer class="hint">Nessuna chat, nessun account, nessuna cronologia salvata.</footer>
+  <footer class="hint">
+    <div>Nessuna chat, nessun account, nessuna cronologia salvata.</div>
+    <div class="hint-credit">Powered by J.Ye — nei ritagli di tempo dal lavoro NIS2 😄</div>
+  </footer>
 </div>
 
 <!-- ============== MODALE: CREA TAVOLO ============== -->
