@@ -6,13 +6,14 @@
 <title>VP Chess — Scacchi Online, partite rapide senza account</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%233c5f39'/%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='64' fill='%23fbf7ec'%3E%E2%99%9A%3C/text%3E%3C/svg%3E" />
 <script>
-  // Applica subito il tema salvato (o quello di sistema) prima del primo
-  // paint, per evitare un lampo del tema chiaro seguito dal cambio scuro.
+  // Applica subito il tema salvato prima del primo paint (per evitare un
+  // lampo). Il default e' sempre 'light': il tema scuro si attiva solo
+  // se l'utente lo sceglie esplicitamente col toggle (non si segue mai
+  // la preferenza di sistema).
   (function(){
     try{
       var saved = localStorage.getItem('vp_chess_theme');
-      var theme = saved || ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
     }catch(e){}
   })();
 </script>
@@ -797,6 +798,45 @@
   .reaction-btn:active{ transform: scale(.9); }
   .reaction-btn:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
 
+  /* ---------- Barra chat (sotto le reazioni emoji) ---------- */
+  .chat-bar{
+    width:100%;
+    max-width: 640px;
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .chat-bar input[type="text"]{
+    flex:1;
+    min-width: 0;
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--panel-border);
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 14.5px;
+    outline:none;
+    transition: border-color .15s ease, box-shadow .15s ease, background .2s ease;
+  }
+  .chat-bar input[type="text"]:focus{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+  }
+  .chat-char-count{
+    flex-shrink:0;
+    min-width: 20px;
+    text-align:right;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+  }
+  .chat-char-count.chat-char-count-low{ color: var(--danger); font-weight:700; }
+  .chat-bar .chat-send{
+    flex-shrink:0;
+    min-height: 42px;
+    padding: 10px 18px;
+  }
+
   /* ---------- Feed reazioni (pannello laterale) ---------- */
   .reaction-feed{
     display:flex;
@@ -954,12 +994,18 @@
         <button type="button" class="reaction-btn" data-emoji-key="thumbsdown" title="Mossa debole">&#x1F44E;</button>
         <button type="button" class="reaction-btn" data-emoji-key="clap" title="Tattica brillante o vittoria">&#x1F44F;</button>
       </div>
+
+      <form id="chat-form" class="chat-bar hidden" autocomplete="off" aria-label="Scrivi un messaggio in chat">
+        <input type="text" id="chat-input" maxlength="30" placeholder="Scrivi un messaggio..." aria-label="Messaggio di chat (massimo 30 caratteri)" />
+        <span class="chat-char-count" id="chat-char-count">30</span>
+        <button type="submit" class="btn btn-primary chat-send" disabled aria-label="Invia messaggio">Invia</button>
+      </form>
     </div>
 
     <aside class="side-panel">
-      <h3>Reazioni</h3>
+      <h3>Chat</h3>
       <div class="reaction-feed" id="reaction-feed" aria-live="polite">
-        <div class="reaction-feed-empty" id="reaction-feed-empty">Nessuna reazione ancora.</div>
+        <div class="reaction-feed-empty" id="reaction-feed-empty">Nessun messaggio ancora.</div>
       </div>
       <h3>Mosse</h3>
       <label class="toggle-row">
@@ -1235,6 +1281,12 @@
   var reactionFeed = $('reaction-feed');
   var reactionFeedEmpty = $('reaction-feed-empty');
 
+  var chatForm = $('chat-form');
+  var chatInput = $('chat-input');
+  var chatCharCount = $('chat-char-count');
+  var chatSendBtn = chatForm ? chatForm.querySelector('.chat-send') : null;
+  var CHAT_MAX_LEN = 30;
+
   var modalPromotion = $('modal-promotion');
   var promoChoices = $('promo-choices');
 
@@ -1431,6 +1483,11 @@
     showScreen('game');
     renderBoardSkeleton();
     reactionBar.classList.toggle('hidden', state.role !== 'player');
+    if (chatForm){
+      chatForm.classList.toggle('hidden', state.role !== 'player');
+      chatInput.value = '';
+      updateChatCounter();
+    }
     reactionFeed.innerHTML = '';
     reactionFeed.appendChild(reactionFeedEmpty);
   });
@@ -2294,6 +2351,45 @@
   socket.on('reaction', function(data){
     addReactionToFeed(data);
     showSpeechBubble(data.color, data);
+  });
+
+  // ============================================================
+  // Chat libera (testo scritto dall'utente, max 30 caratteri):
+  // condivide il feed e il fumetto con le reazioni rapide, cosi'
+  // tutti i messaggi finiscono in un'unica cronologia leggibile.
+  // ============================================================
+
+  function updateChatCounter(){
+    if (!chatInput || !chatCharCount) return;
+    var remaining = CHAT_MAX_LEN - chatInput.value.length;
+    chatCharCount.textContent = String(remaining);
+    chatCharCount.classList.toggle('chat-char-count-low', remaining <= 5);
+    if (chatSendBtn) chatSendBtn.disabled = chatInput.value.trim().length === 0;
+  }
+
+  if (chatForm && chatInput){
+    chatInput.addEventListener('input', updateChatCounter);
+    updateChatCounter();
+
+    chatForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      var text = chatInput.value.trim().slice(0, CHAT_MAX_LEN);
+      if (!text) return;
+      socket.emit('send_chat', { text: text });
+      chatInput.value = '';
+      updateChatCounter();
+      chatInput.focus();
+    });
+  }
+
+  socket.on('chat_message', function(data){
+    // Riusa lo stesso formato dati delle reazioni (emoji + nickname +
+    // avatar + testo) cosi' feed e fumetto restano un unico componente;
+    // il testo dell'utente passa sempre da document.createTextNode
+    // dentro addReactionToFeed/showSpeechBubble, mai da innerHTML.
+    var chatData = { emoji: '💬', nickname: data.nickname, avatar: data.avatar, phrase: data.text };
+    addReactionToFeed(chatData);
+    showSpeechBubble(data.color, chatData);
   });
 
 })();

@@ -17,27 +17,35 @@ Principi di sicurezza applicati in questo file:
 Eventi Socket.IO (client -> server):
     join_lobby, create_table, join_table, leave_table, attempt_move,
     choose_promotion, resign_game, offer_draw, respond_draw,
-    toggle_reconnect, request_state, send_reaction
+    toggle_reconnect, request_state, send_reaction, send_chat
 
 Eventi Socket.IO (server -> client):
     lobby_state, table_joined, game_state, game_started, move_accepted,
     move_rejected, clock_sync, player_disconnected, player_reconnected,
     game_over, error_message, draw_offered, draw_declined, lobby_joined,
-    reconnect_failed, reaction
+    reconnect_failed, reaction, chat_message
 
 Nota: 'table_joined', 'lobby_joined', 'draw_offered', 'draw_declined',
-'reconnect_failed' e 'reaction' sono aggiunte rispetto alla lista base
-indicata nelle specifiche, per rendere l'API piu' chiara (esplicitamente
-consentito).
+'reconnect_failed', 'reaction' e 'chat_message' sono aggiunte rispetto alla
+lista base indicata nelle specifiche, per rendere l'API piu' chiara
+(esplicitamente consentito).
 
-Profili e chat a frasi predefinite:
+Profili, reazioni a frasi predefinite e chat libera:
 - Non esiste piu' un nickname libero: l'utente sceglie uno dei due profili
   fissi definiti in PROFILES (nessun testo libero, niente da sanitizzare).
-- La "chat" in partita non invia mai testo libero: il client puo' solo
-  mandare la CHIAVE di un'emoji predefinita (send_reaction). Il server
+- Le reazioni rapide (send_reaction) non inviano mai testo libero: il
+  client puo' solo mandare la CHIAVE di un'emoji predefinita. Il server
   sceglie una frase casuale dalla tabella PERSONA_PHRASES associata al
   profilo del mittente e la trasmette (evento 'reaction'). Il testo della
-  frase non arriva MAI dal client: e' sempre e solo scelto server-side.
+  frase non arriva MAI dal client in questo canale: e' sempre e solo
+  scelto server-side.
+- La chat libera (send_chat) invece consente testo scritto dall'utente,
+  ma con vincoli stretti pensati per un'app senza account e senza
+  moderazione umana: solo giocatori (non spettatori), messaggio troncato
+  a CHAT_MAX_LEN caratteri, niente caratteri di controllo/andare a capo,
+  e un cooldown anti-spam per posto (PlayerSlot), non per sid, cosi' da
+  resistere anche a riconnessioni. Il rendering lato client usa sempre
+  textContent (mai innerHTML) sul testo del messaggio.
 """
 
 import eventlet
@@ -88,6 +96,8 @@ RECONNECT_GRACE_SECONDS = 60
 FINISHED_TABLE_TTL_SECONDS = 60
 CLOCK_TICK_SECONDS = 1
 REACTION_COOLDOWN_SECONDS = 6
+CHAT_MAX_LEN = 30
+CHAT_COOLDOWN_SECONDS = 2
 
 # --------------------------------------------------------------------------
 # Validazione input
@@ -96,6 +106,13 @@ REACTION_COOLDOWN_SECONDS = 6
 # Nome tavolo: fino a 30 caratteri, charset ristretto (niente < > & " ' per
 # evitare qualunque iniezione HTML, anche se il client usa comunque textContent).
 TABLE_NAME_RE = re.compile(r"^[\w\-\.\,\!\?\: ]{0,30}$", re.UNICODE)
+
+# Messaggio di chat: nessun carattere di controllo (niente a-capo, tab,
+# ecc.) cosi' un messaggio resta sempre su una riga sola. Il charset non
+# e' altrimenti ristretto (emoji e lettere accentate sono benvenute): la
+# protezione da injection e' comunque garantita dal rendering client con
+# textContent, mai innerHTML.
+CHAT_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 PROMOTION_MAP = {"q": chess.QUEEN, "r": chess.ROOK, "b": chess.BISHOP, "n": chess.KNIGHT}
 
@@ -344,6 +361,7 @@ class PlayerSlot:
     connected: bool = False
     disconnect_deadline: Optional[float] = None  # time.monotonic() limite riconnessione
     last_reaction_ts: Optional[float] = None      # time.monotonic() dell'ultima reazione inviata
+    last_chat_ts: Optional[float] = None          # time.monotonic() dell'ultimo messaggio di chat
 
     def occupied(self) -> bool:
         return self.token is not None
@@ -1155,6 +1173,58 @@ def on_send_reaction(data):
         "emoji_key": emoji_key,
         "emoji": REACTIONS[emoji_key],
         "phrase": phrase,
+    }, room=table.id)
+
+
+@socketio.on("send_chat")
+def on_send_chat(data):
+    """Chat libera (testo scritto dall'utente), a differenza delle reazioni
+    rapide che usano solo frasi predefinite. Vincoli stretti perche' non
+    c'e' account ne' moderazione umana: solo giocatori, messaggio breve,
+    niente caratteri di controllo, cooldown anti-spam per posto."""
+    sid = request_sid()
+    sess = get_session(sid)
+    if not sess or not sess.get("table_id"):
+        return
+    table = get_table_or_none(sess["table_id"])
+    if not table or table.status != "playing":
+        return
+    color = table.color_of_sid(sid)
+    if color is None:
+        emit_error(sid, "Solo i giocatori possono scrivere in chat.")
+        return
+
+    # Anti-spam lato server, legato al posto (PlayerSlot) cosi' da
+    # sopravvivere anche a una riconnessione con un sid diverso.
+    slot = table.slot_for_color(color)
+    now_mono = time.monotonic()
+    if slot.last_chat_ts is not None and (now_mono - slot.last_chat_ts) < CHAT_COOLDOWN_SECONDS:
+        wait = round(CHAT_COOLDOWN_SECONDS - (now_mono - slot.last_chat_ts), 1)
+        emit_error(sid, f"Aspetta ancora {wait}s prima di scrivere di nuovo.")
+        return
+
+    data = data or {}
+    text = data.get("text")
+    if not isinstance(text, str):
+        emit_error(sid, "Messaggio non valido.")
+        return
+
+    text = text.strip()
+    if not text:
+        return
+    text = text[:CHAT_MAX_LEN]
+    if CHAT_CONTROL_CHAR_RE.search(text):
+        emit_error(sid, "Messaggio non valido: niente a-capo o caratteri di controllo.")
+        return
+
+    slot.last_chat_ts = now_mono
+    profile_id = sess.get("profile_id")
+
+    socketio.emit("chat_message", {
+        "color": color,
+        "nickname": sess.get("nickname"),
+        "avatar": PROFILES.get(profile_id, {}).get("avatar"),
+        "text": text,
     }, room=table.id)
 
 
